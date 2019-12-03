@@ -26,12 +26,11 @@ class PPONetwork(nn.Module):
         super(PPONetwork, self).__init__()
         self.action_count = action_space.shape[0]
         self.in_size = in_size
-        self.mu = nn.Sequential(nn.Linear(self.in_size,64),
+        self.model = nn.Sequential(nn.Linear(self.in_size,64),
                             nn.Sigmoid(),
                             nn.Linear(64,64),   # 1 output for each action here just one
                             nn.Sigmoid(),
-                            nn.Linear(64,self.action_count),
-                            nn.Tanh(),
+                            nn.Linear(64,2*self.action_count),
                             )
         self.sigma_sqrt = nn.Linear(1, self.action_count, bias=False)
         # initializ sigma to sqrt(0.5) ~ 0.7
@@ -41,7 +40,10 @@ class PPONetwork(nn.Module):
     def forward(self, inputs):
         # removing inherent bias in Sigmoid
         # mu = 2 * (self.mu(inputs)-0.5)
-        mu = self.mu(inputs)
+        out = self.model(inputs)
+        print(out)
+        mu = nn.Tanh(out[:,:self.action_count])
+        sigma = nn.Softplus(self.model(inputs)[:,self.action_count:])
 
         if mu.shape[0] == 1:
             sigma = self.sigma_sqrt(torch.ones([1]))**2
