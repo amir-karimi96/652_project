@@ -10,8 +10,8 @@ from ppo_agent import PPO
 
 import time
 import sys
-#sys.path.append('/home/amir/RL_LAB/SenseAct/')
-import senseact.devices.dxl.dxl_utils as dxl
+sys.path.append('/home/amir/RL_LAB/SenseAct/')
+
 from senseact.envs.ur.reacher_env import ReacherEnv
 from senseact.devices.ur import ur_utils
 from senseact.utils import NormalizedEnv
@@ -114,7 +114,7 @@ def main(cycle_time, idn, baud, port_str, batch_size, mini_batch_div, epoch_coun
     #                 speed_max=None,
     #                 dt=0.008,
     #                 delay=0.0)
-    
+
     #DO WE NEED RANDOM STATE Variable??
     rand_state = np.random.RandomState(1).get_state()
     host_ip = '169.254.39.68'
@@ -143,10 +143,10 @@ def main(cycle_time, idn, baud, port_str, batch_size, mini_batch_div, epoch_coun
         delay=0.0,
         random_state=rand_state
     )
-    print('done')
+    #print('done')
     env = NormalizedEnv(env)
     env.start()
-    print("starting")
+    #print("starting")
 #    obs = env.reset()
 #    print('resetted', obs)
 #    env.step(action=np.array([0,0])
@@ -235,7 +235,7 @@ if __name__ == "__main__":
                         help="Number of times to train over the entire batch per update.")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount")
     parser.add_argument("--l", type=float, default=0.99, help="lambda for lambda return")
-    parser.add_argument("--max_action", type=float, default=100,
+    parser.add_argument("--max_action", type=float, default=0.3,
                         help="The maximum value you will output to the motor. "
                              "This should be dependent on the control mode which you select.")
     parser.add_argument("--outdir", type=str, default=None)

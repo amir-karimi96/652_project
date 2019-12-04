@@ -32,22 +32,24 @@ class PPONetwork(nn.Module):
                             nn.Sigmoid(),
                             nn.Linear(64,2*self.action_count),
                             )
-        self.sigma_sqrt = nn.Linear(1, self.action_count, bias=False)
+        #self.sigma_sqrt = nn.Linear(1, self.action_count, bias=False)
         # initializ sigma to sqrt(0.5) ~ 0.7
-
-        self.sigma_sqrt.weight = nn.Parameter(0.7*torch.ones((self.action_count,1)))
+        self.Tanh = nn.Tanh()
+        self.Softplus = nn.Softplus()
+        #self.sigma_sqrt.weight = nn.Parameter(0.7*torch.ones((self.action_count,1)))
 
     def forward(self, inputs):
-        # removing inherent bias in Sigmoid
-        # mu = 2 * (self.mu(inputs)-0.5)
+        '''
+        inputs shape is (#states, obs_len)
+        return [mus sigmas] with shape (#states, 2 * action_count )
+        '''
         out = self.model(inputs)
-        print(out)
-        mu = nn.Tanh(out[:,:self.action_count])
-        sigma = nn.Softplus(self.model(inputs)[:,self.action_count:])
+        mu = self.Tanh(out[:,:self.action_count])
+        sigma = self.Softplus(out[:,self.action_count:])
 
-        if mu.shape[0] == 1:
-            sigma = self.sigma_sqrt(torch.ones([1]))**2
-            return torch.cat((mu, sigma ))
+        #if mu.shape[0] == 1:
+        #    sigma = self.sigma_sqrt(torch.ones([1]))**2
+        #    return torch.cat((mu, sigma ))
 
-        sigma = self.sigma_sqrt(torch.ones((mu.shape[0],1)))**2
+        #sigma = self.sigma_sqrt(torch.ones((mu.shape[0],1)))**2
         return torch.cat((mu, sigma ),1)

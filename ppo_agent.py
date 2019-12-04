@@ -49,13 +49,29 @@ class PPO:
         self.dist_old_buffer = []
         self.dist_log_old_buffer = []
         return None
-    
+
     @staticmethod
     def _segment_network(output):
         actions = output[:len(output)//2]
         stds = output[len(output)//2:]
-        
+
         return actions, stds
+
+    @staticmethod
+    def _segment_network_2(output):
+        mus = output[:,:output.shape[1]//2]
+        stds = output[:,output.shape[1]//2:]
+
+    @staticmethod
+    def _array_to_sigma_matrix(array):
+        """
+        array of std shape(#states, action_count)
+        return [sigma1_3x3, ... sigman_3x3]
+        """
+        S = torch.zeros((array.shape[0],9))
+        S[:,np.array([0,4,8])] = array
+        S = S.reshape(array.shape[0],3,3)
+        return S
 
     def step(self, state, r, t):
         """
@@ -67,24 +83,33 @@ class PPO:
         :return: action
         """
         self.timestep_buffer.append(t)
-        
+
         output = self.network(torch.tensor(state, device=self.device, dtype=torch.float32))
+
+        #A to have always two dimensional output even with one input
+        output_2 = self.network(torch.tensor(state, device=self.device, dtype=torch.float32).reshape(1,self.state_size))
+
         #output in format
         # joint 1 action, joint 2 action, ... joint 1 std, joint 2 std, ....
         mus, stds = self._segment_network(output)
-        
-        
+
+        #A second version for array or one input
+        mus, std = self._segment_network_2(output_2)
+
         # This is the policy network. Why is it value???
-        self.summary_writer.add_scalar('Value/mu', output[0].detach().numpy(), len(self.timestep_buffer))
+        #A not having summaries for now
+        #self.summary_writer.add_scalar('policy/mus/', mus.detach().numpy(), len(self.timestep_buffer))
+
 
         # add a very small amount to make sure std is not exactly zero
-        self.dist_old_buffer.append( Normal(mus, scale = stds, validate_args=True))
+        STDS = self._array_to_sigma_matrix(std)
+        self.dist_old_buffer.append( Normal(loc = mus, scale = STDS, validate_args=True))
 
-        # sampling action
-        actions = self.dist_old_buffer[-1].sample()
+        # sampling action shape (1, action_count )  --> (action_count, )
+        actions = self.dist_old_buffer[-1].sample().reshape(-1)
 
         # saving log probability
-        self.dist_log_old_buffer.append(self.dist_old_buffer[-1].log_prob(actions))
+        self.dist_log_old_buffer.append( torch.sum(self.dist_old_buffer[-1].log_prob(actions).reshape(-1)))
 
         # saving transition data
         # reward for first time step is zero
@@ -133,13 +158,17 @@ class PPO:
         """
         Compute the ratio between old and new pi
         :param actions: torch stack of actions
-        :param old_pi: numpy array of pdf of actions
-        :param new_pi: torch stack of normal objects
-        :return:
+        :param old_pi: numpy array of pdf of actions shape (#states, )
+        :param new_pi: torch stack of normal objects shape (#states, )
+        :return: rho_buffer shape (#states, )
         """
-        return torch.exp(new_pi.log_prob(actions)) / old_pi
+        return torch.exp( new_pi.log_prob(actions) ) / old_pi
 
     def clip(self,rho_buffer,e):
+        """
+        rho_buffer : shape(#states, action_count)
+        return : clipped rho_buffer of shape(#states,)
+        """
         m = torch.tensor(1-e,dtype=torch.float32)
         M = torch.tensor(1+e,dtype=torch.float32)
         return torch.min(torch.max(m, rho_buffer),M)
@@ -179,6 +208,7 @@ class PPO:
         #PPO8 normalize advantage
         self.H_buffer = (self.H_buffer - torch.mean(self.H_buffer))/torch.std(self.H_buffer)
 
+
         # regenerate old_pi from old_log_buffer
         # we want just the numbers not grads so calling detach
         self.dist_old_buffer = torch.exp(torch.stack(self.dist_log_old_buffer).detach())
@@ -199,8 +229,10 @@ class PPO:
                 division_ind = np.arange(m*self.mini_batch_size , (m+1)*self.mini_batch_size)
 
 
-                new_prob = self.network(shuffled_s_buffer[division_ind])
-                new_dist_buffer = Normal(loc=new_prob[:,0], scale=new_prob[:,1], validate_args=True)
+                output = self.network(shuffled_s_buffer[division_ind])
+                mus, stds = self._segment_network_2(output)
+                STDS = self._array_to_sigma_matrix(stds)
+                new_dist_buffer = Normal(loc = mus, scale = stds, validate_args=True)
 
                 #PPO6 compute rho coefficients
                 rho_buffer = self.compute_rho(actions=shuffled_a_buffer[division_ind],
