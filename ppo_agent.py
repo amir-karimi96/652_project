@@ -4,7 +4,7 @@ Place your PPO agent code in here.
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from torch.distributions.normal import Normal
+from torch.distributions.multivariate_normal import MultivariateNormal
 
 class PPO:
     def __init__(self,
@@ -61,16 +61,17 @@ class PPO:
     def _segment_network_2(output):
         mus = output[:,:output.shape[1]//2]
         stds = output[:,output.shape[1]//2:]
+        
+        return mus, stds
 
-    @staticmethod
-    def _array_to_sigma_matrix(array):
+    def _array_to_sigma_matrix(self, array):
         """
         array of std shape(#states, action_count)
         return [sigma1_3x3, ... sigman_3x3]
         """
-        S = torch.zeros((array.shape[0],9))
-        S[:,np.array([0,4,8])] = array
-        S = S.reshape(array.shape[0],3,3)
+        S = torch.zeros((array.shape[0],self.network.action_count**2))
+        S[:,np.array([0,3])] = array
+        S = S.reshape(array.shape[0],self.network.action_count,self.network.action_count)
         return S
 
     def step(self, state, r, t):
@@ -84,14 +85,14 @@ class PPO:
         """
         self.timestep_buffer.append(t)
 
-        output = self.network(torch.tensor(state, device=self.device, dtype=torch.float32))
+        #output = self.network(torch.tensor(state, device=self.device, dtype=torch.float32))
 
         #A to have always two dimensional output even with one input
         output_2 = self.network(torch.tensor(state, device=self.device, dtype=torch.float32).reshape(1,self.state_size))
 
         #output in format
         # joint 1 action, joint 2 action, ... joint 1 std, joint 2 std, ....
-        mus, stds = self._segment_network(output)
+        #mus, stds = self._segment_network(output)
 
         #A second version for array or one input
         mus, std = self._segment_network_2(output_2)
@@ -103,7 +104,7 @@ class PPO:
 
         # add a very small amount to make sure std is not exactly zero
         STDS = self._array_to_sigma_matrix(std)
-        self.dist_old_buffer.append( Normal(loc = mus, scale = STDS, validate_args=True))
+        self.dist_old_buffer.append( MultivariateNormal(loc = mus, covariance_matrix = STDS, validate_args=True))
 
         # sampling action shape (1, action_count )  --> (action_count, )
         actions = self.dist_old_buffer[-1].sample().reshape(-1)
@@ -232,7 +233,7 @@ class PPO:
                 output = self.network(shuffled_s_buffer[division_ind])
                 mus, stds = self._segment_network_2(output)
                 STDS = self._array_to_sigma_matrix(stds)
-                new_dist_buffer = Normal(loc = mus, scale = stds, validate_args=True)
+                new_dist_buffer = MultivariateNormal(loc = mus, covariance_matrix = STDS, validate_args=True)
 
                 #PPO6 compute rho coefficients
                 rho_buffer = self.compute_rho(actions=shuffled_a_buffer[division_ind],
@@ -269,9 +270,9 @@ class PPO:
         self.summary_writer.add_scalar('Loss/policy',self.loss_policy.detach().numpy(), self.update_counter)
         self.summary_writer.add_scalar('Loss/value',self.loss_value.detach().numpy(), self.update_counter)
         self.summary_writer.add_scalar('Loss/total', self.loss.detach().numpy(), self.update_counter)
-        self.summary_writer.add_scalar('value/sigma.value', torch.mean(self.network.sigma_sqrt.weight).detach().numpy(), self.update_counter)
+        #self.summary_writer.add_scalar('value/sigma.value', torch.mean(self.network.sigma_sqrt.weight).detach().numpy(), self.update_counter)
         #self.summary_writer.add_scalar('grad/mu.bias', torch.mean((self.network.mu[2].bias.grad)**2).numpy(), self.update_counter)
-        self.summary_writer.add_scalar('grad/mu.weight', torch.mean((self.network.mu[2].weight.grad)**2).numpy(), self.update_counter)
+        #self.summary_writer.add_scalar('grad/mu.weight', torch.mean((self.network.mu[2].weight.grad)**2).numpy(), self.update_counter)
         self.summary_writer.add_scalar('grad/value.bias', torch.mean((self.value_network[2].bias.grad)**2).numpy(), self.update_counter)
         self.summary_writer.add_scalar('grad/value.weight', torch.mean((self.value_network[2].weight.grad)**2).numpy(), self.update_counter)
 

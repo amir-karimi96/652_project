@@ -10,7 +10,7 @@ from ppo_agent import PPO
 
 import time
 import sys
-sys.path.append('/home/amir/RL_LAB/SenseAct/')
+#sys.path.append('/home/amir/RL_LAB/SenseAct/')
 
 from senseact.envs.ur.reacher_env import ReacherEnv
 from senseact.devices.ur import ur_utils
@@ -195,7 +195,7 @@ def main(cycle_time, idn, baud, port_str, batch_size, mini_batch_div, epoch_coun
                 #    env.render()
                 action = agent.step(state = observation, r = reward, t=n)
                 action = action * max_action
-                observation, reward, done, info = env.step((action,)) # take the action
+                observation, reward, done, info = env.step(action) # take the action
                 #print(observation)
                 undiscounted_return[b,ep] = undiscounted_return[b,ep]+reward
                 #print(action,reward)
@@ -207,7 +207,7 @@ def main(cycle_time, idn, baud, port_str, batch_size, mini_batch_div, epoch_coun
 
         # learning using batch of data
         summary_writer.add_scalar('return', np.mean(undiscounted_return[b,:]), 2048*b)
-        env.stop()
+#        env.stop()
         agent.learn(t = t)
         agent.reset_buffers()
         t = 0
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     parser.add_argument("--baud", type=int, default=1000000, help="Dynamixel Baud")
     parser.add_argument("--port_str", type=str, default=None,
                         help="Default of None will use the first device it finds. Set this to override.")
-    parser.add_argument("--batch_size", type=int, default=41,
+    parser.add_argument("--batch_size", type=int, default=4,
                         help="How many episodes to record for each learning update")
     parser.add_argument("--mini_batch_div", type=int, default=32, help="Number of division to divide batch into")
     parser.add_argument("--epoch_count", type=int, default=10,
